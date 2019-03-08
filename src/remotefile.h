@@ -44,7 +44,9 @@ public:
 	QDir basePath() const { return _basePath; }
 	QString localFilePath() const { return _localFilePath; }
 	bool localFileExists() const { return QFile(_localFilePath).exists(); }
-	QFile &localFile() const { return QFile(_localFilePath); }
+    #if defined(Q_OS_WIN)
+	    QFile &localFile() const { return QFile(_localFilePath); }
+    #endif
 	bool isMemoryOnly() const { return _memoryOnly; }
 	QString errorMsg() const { return _error; }
 	QByteArray bytes() const { return _bytes; }
