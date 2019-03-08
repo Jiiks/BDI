@@ -10,9 +10,12 @@
 
 #pragma once
 
+#include <QtCore>
 #include <QString>
+
 #include "qtfs.hpp"
 #include "qtjson.hpp"
+#include "logger.h"
 
 class UserConfig final {
 public:
@@ -26,14 +29,17 @@ public:
 	void autoInject(bool autoInject);
 	QJsonObject toObj() const;
 
-	QString installPath() const { return _installPath; }
+	QString installPath(const QString &channel = "") const;
 	void setInstallPath(const QString &installPath);
-	QString dataPath() const { return _dataPath; }
+	QString dataPath(const QString &channel = "") const;
 	void setDataPath(const QString &dataPath);
 
 	UserConfig *read(const QString &fPath = "userconfig.json");
 	UserConfig *write(const QString &fPath = "userconfig.json");
 	UserConfig *defaults();
+
+	QString defaultInstallPath() const;
+	QString defaultDataPath() const;
 
 private:
 	bool _commonInstallPath;

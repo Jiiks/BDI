@@ -17,10 +17,12 @@
 
 #include "splash.h"
 #include "about.h"
+#include "remotefile.h"
 #include "errordialog.h"
 #include "config.h"
 #include "userconfig.h"
 #include "zip.h"
+#include "asset.h"
 
 class MainWindow final : public QMainWindow {
 	Q_OBJECT
@@ -32,13 +34,15 @@ private:
 	Ui::MainWindowClass _ui;
 	About *_about;
 	UserConfig _userConfig;
-	QJsonObject _coreObj;
-	QJsonObject _clientObj;
+	QMap<QString, Asset> _assets;
+	Asset asset(const QString &id) const;
+	QJsonObject _remotes;
 	QVector<Discord*> _discords;
+	QVector<Discord*> *_toRemove;
+	QVector<Discord*> *_toInstall;
 	bool _remotesLoaded;
 	
 	void initOptionsPage() const;
-	void install(QVector<Discord*> discords) const;
 
 protected:
 	int _mousePressX;
@@ -61,4 +65,8 @@ public slots:
 	void btnContinueClicked() const;
 	void installCheckboxCheckedChanged(bool checked) const;
 	void dataCheckboxCheckedChanged(bool checked) const;
+	void install() const;
+	void processRemotes() const;
+	void inject() const;
+
 };

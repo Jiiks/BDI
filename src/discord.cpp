@@ -59,14 +59,14 @@ void Discord::locate() {
 
 	_latestVersion = latestVersion;
 
-	auto rDir = QDir(QDir::toNativeSeparators(latestDir.absolutePath() + "/resources"));
+	auto rDir = QDir(QDir::cleanPath(latestDir.absolutePath() + "/resources"));
 
 	if(!rDir.exists()) {
 		_installState = UNAVAILABLE;
 		return;
 	}
 
-	_appDir = QDir(QDir::toNativeSeparators(rDir.absolutePath() + "/app"));
+	_appDir = QDir(QDir::cleanPath(rDir.absolutePath() + "/app"));
 
 	if(!_appDir.exists()) {
 		_installState = NOT_INSTALLED;
@@ -84,32 +84,32 @@ void Discord::locate() {
 void Discord::locate() {}
 #elif defined(Q_OS_DARWIN)
 void Discord::locate() {
-	_baseDir = QDir(QDir::toNativeSeparators("/Applications"));
+	_baseDir = QDir(QDir::cleanPath("/Applications"));
 
 	if(!_baseDir.exists()) {
 		_installState = UNAVAILABLE;
 		return;
 	}
 
-    auto bundleDir = QDir(QDir::toNativeSeparators(_baseDir.absolutePath() + "/" + applicationName()));
+    auto bundleDir = QDir(QDir::cleanPath(_baseDir.absolutePath() + "/" + applicationName()));
 
 	if(!bundleDir.exists()) {
-        _baseDir = QDir(QDir::toNativeSeparators(QDir::homePath() + "/Applications"));
-        bundleDir = QDir(QDir::toNativeSeparators(_baseDir.absolutePath() + "/" + applicationName()));
+        _baseDir = QDir(QDir::cleanPath(QDir::homePath() + "/Applications"));
+        bundleDir = QDir(QDir::cleanPath(_baseDir.absolutePath() + "/" + applicationName()));
         if(!bundleDir.exists()) {
             _installState = UNAVAILABLE;
 		    return;
         }
 	}
 
-	auto rDir = QDir(QDir::toNativeSeparators(bundleDir.absolutePath() + "/Contents/Resources"));
+	auto rDir = QDir(QDir::cleanPath(bundleDir.absolutePath() + "/Contents/Resources"));
 
 	if(!rDir.exists()) {
 		_installState = UNAVAILABLE;
 		return;
 	}
 
-	_appDir = QDir(QDir::toNativeSeparators(rDir.absolutePath() + "/app"));
+	_appDir = QDir(QDir::cleanPath(rDir.absolutePath() + "/app"));
 
 	if(!_appDir.exists()) {
 		_installState = NOT_INSTALLED;
@@ -127,14 +127,21 @@ void Discord::locate() {
 void Discord::locate() { _installState = UNAVAILABLE; }
 #endif
 
-bool Discord::inject(const QString &stub, QJsonObject config, RemoteFile &coreZip, RemoteFile &clientZip) {
+bool Discord::inject(const QString &stub, QJsonObject config, const QString &corePath, const QString &clientPath) {
+	Logger::Debug(_channel + " injecting to: " + _appDir.absolutePath());
 	if(!_appDir.exists()) {
-		if (!_appDir.mkdir(".")) return false;
+		Logger::Debug(_channel + " _appDir does not exist");
+		if(!_appDir.mkpath(".")) {
+			Logger::Debug(_channel + " cannot create _appDir");
+			emit injected(false);
+			return false;
+		}
 	}
 
 	QFile indexFile(_appDir.filePath("index.js"));
 	if (!indexFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
 		Logger::Debug("Unable to write to: " + _appDir.filePath("index.js"));
+		emit injected(false);
 		return false;
 	}
 
@@ -144,6 +151,14 @@ bool Discord::inject(const QString &stub, QJsonObject config, RemoteFile &coreZi
 	QFile configFile(_appDir.filePath("bd.json"));
 	if(!configFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
 		Logger::Debug("Unable to write to: " + _appDir.filePath("bd.json"));
+		emit injected(false);
+		return false;
+	}
+
+	QFile packageFile(_appDir.filePath("package.json"));
+	if(!packageFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+		Logger::Debug("Unable to write to: " + _appDir.filePath("package.json"));
+		emit injected(false);
 		return false;
 	}
 
@@ -151,15 +166,21 @@ bool Discord::inject(const QString &stub, QJsonObject config, RemoteFile &coreZi
 	auto paths = config["paths"].toObject();
 
 	if(options["commonCore"].toBool()) {
-		paths["core"] = paths["core"].toString() + "/BetterDiscord";
+		paths["core"] = QDir::cleanPath(paths["core"].toString());
+		paths["client"] = QDir::cleanPath(paths["client"].toString());
 	} else {
-		paths["core"] = paths["core"].toString() + "/BetterDiscord/" + _channel;
+		paths["core"] = QDir::cleanPath(paths["core"].toString() + _channel);
+		paths["client"] = QDir::cleanPath(paths["client"].toString() + _channel);
 	}
 
+	QDir editorPath(paths["core"].toString());
+	editorPath.cdUp();
+	paths["editor"] = QDir::cleanPath(editorPath.absolutePath() + "/editor");
+
 	if(options["commonData"].toBool()) {
-		paths["data"] = paths["data"].toString() + "/BetterDiscord";
+		paths["data"] = QDir::cleanPath(paths["data"].toString());
 	} else {
-		paths["data"] = paths["data"].toString() + "/BetterDiscord/" + _channel;
+		paths["data"] = QDir::cleanPath(paths["data"].toString() + _channel);
 	}
 
 	config["paths"] = paths;
@@ -167,7 +188,16 @@ bool Discord::inject(const QString &stub, QJsonObject config, RemoteFile &coreZi
 	QTextStream configOut(&configFile);
 	configOut << QJsonDocument(config).toJson(QJsonDocument::Indented);
 
+	QTextStream packageOut(&packageFile);
+	packageOut << QJsonDocument(QJsonObject{
+		{ "name", "betterdiscord" },
+		{ "description", "BetterDiscord" },
+		{ "main", "index.js" },
+		{ "private", true }
+	}).toJson(QJsonDocument::Indented);
+
 	_installState = INSTALLED;
+	emit injected(true);
 	return true;
 }
 
@@ -259,7 +289,7 @@ QDir Discord::resolveBaseDir() const {
 	QDir rDir(QStandardPaths::locate(QStandardPaths::AppConfigLocation, "", QStandardPaths::LocateOption::LocateDirectory));
 #elif defined(Q_OS_DARWIN)
 	auto aDir = QDir(QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "", QStandardPaths::LocateOption::LocateDirectory));
-	QDir rDir(QDir::toNativeSeparators(aDir.absolutePath() + applicationName()));
+	QDir rDir(QDir::cleanPath(aDir.absolutePath() + applicationName()));
 #endif
 	QCoreApplication::setApplicationName(appName);
 	return rDir;
