@@ -88,21 +88,24 @@ void Zip::extract(const QString &out) {
 }
 
 void Zip::extractTarGz() {
-	auto gzProcess = new QProcess(this);
-	QStringList gzArgs{ "-zxf", _in };
-	Logger::Debug(_extractProgram + " " + gzArgs.join(" "));
+    auto gzProcess = new QProcess(this);
 
-	connect(gzProcess, static_cast<void(QProcess:: *)(int, QProcess::ExitStatus)>(&QProcess::finished), [=](int exitCode, QProcess::ExitStatus exitStatus) {
-		delete gzProcess;
-		emit extracted(true);
-	});
+    if(!QDir(_out).exists()) {
+        if(!QDir(_out).mkpath(".")) {
+            Logger::Debug("cannot create: " + _out);
+        }
+    }
 
-	gzProcess->start(_extractProgram, gzArgs);
+    QStringList gzArgs{ "-zxf", _in, "-C", _out };
+    Logger::Debug(_extractProgram + " " + gzArgs.join(" "));
 
-	if(!gzProcess->waitForStarted()) {
-		Logger::Debug("gzProcess failed to start!");
-		emit extracted(false);
-	}
+    connect(gzProcess, static_cast<void(QProcess:: *)(int, QProcess::ExitStatus)>(&QProcess::finished), [=](int exitCode, QProcess::ExitStatus exitStatus) {
+        delete gzProcess;
+        _extracted = true;
+        emit extracted(true);
+    });
+
+    gzProcess->start(_extractProgram, gzArgs);
 }
 #else
 void Zip::extract() {
